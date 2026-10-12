@@ -1,4 +1,6 @@
-# Maji Rasa
+# Lahap!
+
+Demo Web : https://mamincoty-lab.github.io/sistem-penjualan-kas-bank-warung-makan-Lahap/
 
 Aplikasi sederhana untuk penjualan serta pencatatan kas dan bank warung makan.
 
