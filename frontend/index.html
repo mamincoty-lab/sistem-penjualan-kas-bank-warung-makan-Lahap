@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Dancing+Script:wght@700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <main id="login-screen" class="login-screen">
@@ -108,8 +108,8 @@
   <div id="edit-transaction-modal" class="approval-modal" aria-hidden="true"><form id="edit-transaction-form" class="approval-dialog"><p class="eyebrow">Koreksi transaksi</p><h2>Edit transaksi kas/bank</h2><label>Jenis<select id="edit-type"><option value="Income">Pemasukan</option><option value="Expense">Pengeluaran</option></select></label><label>Akun<select id="edit-account"><option>Kas</option><option>Bank</option></select></label><label>Kategori<input id="edit-category" required></label><label>Nominal<input id="edit-amount" type="number" min="1" step="1" required></label><label>Tanggal<input id="edit-date" type="datetime-local" required></label><label>Catatan<input id="edit-note"></label><div class="approval-actions"><button id="edit-cancel" class="outline-button" type="button">Batal</button><button class="primary-small-button" type="submit">Lanjutkan</button></div></form></div>
   <div id="debt-settle-modal" class="approval-modal" aria-hidden="true"><form id="debt-settle-form" class="approval-dialog"><p class="eyebrow">Pembayaran tagihan</p><h2 id="debt-settle-title">Bayar / terima tagihan</h2><label>Nominal pembayaran<input id="debt-settle-amount" type="number" min="1" required></label><label>Nama kasir<input id="debt-settle-actor" required></label><div class="approval-actions"><button id="debt-settle-cancel" class="outline-button" type="button">Batal</button><button class="primary-small-button" type="submit">Simpan pembayaran</button></div></form></div>
   <div id="toast" class="toast" role="status"></div>
-  <script src="config.js"></script>
+  <script src="config.js?v=13"></script>
   <script>if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});</script>
-  <script src="app.js"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>
