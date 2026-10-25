@@ -21,10 +21,12 @@ const PORT = Number(process.env.PORT || 3000);
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const OWNER_APPROVAL_PIN = process.env.OWNER_APPROVAL_PIN || '';
+const CASHIER_LOGIN_PIN = process.env.CASHIER_LOGIN_PIN || '';
+const SESSION_SECRET = process.env.SESSION_SECRET || SUPABASE_SERVICE_ROLE_KEY || OWNER_APPROVAL_PIN;
 const API_ACCESS_PIN = process.env.API_ACCESS_PIN || '';
 const API_ACCESS_REQUIRED = false;
 const EXPENSE_APPROVAL_LIMIT = Number(process.env.EXPENSE_APPROVAL_LIMIT || 1000000);
-const CORS_ORIGINS = new Set((process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000').split(',').map(origin => origin.trim()).filter(Boolean));
+const CORS_ORIGINS = new Set([...((process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000').split(',').map(origin => origin.trim()).filter(Boolean)), 'https://mamincoty-lab.github.io']);
 const FRONTEND_DIR = path.resolve(__dirname, '..', 'frontend');
 
 function sendJson(response, status, payload) {
@@ -36,6 +38,36 @@ function matchesSecret(value, expected) {
   const actualBuffer = Buffer.from(String(value || ''));
   const expectedBuffer = Buffer.from(String(expected || ''));
   return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function createLoginSession(role, name) {
+  const expiresAt = Date.now() + 12 * 60 * 60 * 1000;
+  const payload = Buffer.from(JSON.stringify({ role, name, expiresAt })).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  const token = `${payload}.${signature}`;
+  return { token, role, name, expiresAt };
+}
+
+function getLoginSession(request) {
+  const token = String(request.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const [payload, signature, extra] = token.split('.');
+  if (!payload || !signature || extra) return null;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (!matchesSecret(signature, expected)) return null;
+  try {
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return ['owner', 'cashier'].includes(session.role) && Number(session.expiresAt) > Date.now() ? session : null;
+  } catch {
+    return null;
+  }
+}
+
+function cashierCanAccess(request, pathname, body) {
+  if (request.method === 'GET' && ['/api/menu', '/api/combos', '/api/pos-orders', '/api/session'].includes(pathname)) return true;
+  if (request.method === 'POST' && pathname === '/api/orders') return true;
+  return request.method === 'POST' && pathname === '/api/sync'
+    && Array.isArray(body?.operations)
+    && body.operations.every(operation => operation.endpoint === '/api/orders');
 }
 
 function readBody(request) {
@@ -514,6 +546,27 @@ const server = http.createServer(async (request, response) => {
     return response.end();
   }
   try {
+    if (url.pathname === '/api/login' && request.method === 'POST') {
+      const body = await readBody(request);
+      const role = String(body.role || '');
+      const name = String(body.name || '').trim();
+      const pin = String(body.pin || '');
+      const expectedPin = role === 'owner' ? OWNER_APPROVAL_PIN : role === 'cashier' ? CASHIER_LOGIN_PIN : '';
+      if (!name || !expectedPin || !matchesSecret(pin, expectedPin)) return sendJson(response, 401, { error: 'Nama, PIN, atau peran tidak valid.' });
+      return sendJson(response, 200, createLoginSession(role, name));
+    }
+    if (url.pathname === '/api/session' && request.method === 'GET') {
+      const session = getLoginSession(request);
+      return session ? sendJson(response, 200, { role: session.role, name: session.name, expiresAt: session.expiresAt }) : sendJson(response, 401, { error: 'Sesi login sudah berakhir.' });
+    }
+    if (url.pathname === '/api/logout' && request.method === 'POST') {
+      return sendJson(response, 200, { loggedOut: true });
+    }
+    if (url.pathname.startsWith('/api/') && !['/api/login', '/api/status', '/api/session', '/api/logout'].includes(url.pathname)) {
+      const session = getLoginSession(request);
+      if (!session) return sendJson(response, 401, { error: 'Silakan login terlebih dahulu.' });
+      if (session.role === 'cashier' && !cashierCanAccess(request, url.pathname)) return sendJson(response, 403, { error: 'Fitur ini hanya tersedia untuk owner.' });
+    }
     if (url.pathname === '/api/access' && request.method === 'POST') {
       if (!API_ACCESS_PIN) return sendJson(response, 503, { error: 'PIN akses aplikasi belum dikonfigurasi.' });
       const body = await readBody(request);
@@ -531,7 +584,12 @@ const server = http.createServer(async (request, response) => {
     }
     if (url.pathname === '/api/sync' && request.method === 'POST') {
       const body = await readBody(request);
-      return sendJson(response, 200, { results: await replayOfflineOperations(body.operations) });
+      const session = getLoginSession(request);
+      if (session?.role === 'cashier' && (!Array.isArray(body.operations) || body.operations.some(operation => operation.endpoint !== '/api/orders'))) return sendJson(response, 403, { error: 'Sinkronisasi ini hanya tersedia untuk owner.' });
+      const operations = session?.role === 'cashier'
+        ? body.operations.map(operation => ({ ...operation, body: { ...operation.body, cashier_name: session.name } }))
+        : body.operations;
+      return sendJson(response, 200, { results: await replayOfflineOperations(operations) });
     }
     if (url.pathname === '/api/menu' && request.method === 'POST') {
       return sendJson(response, 201, await supabaseRequest('menu_items', { method: 'POST', body: validateMenu(await readBody(request)) }));
@@ -553,6 +611,10 @@ const server = http.createServer(async (request, response) => {
     }
     if (url.pathname === '/api/combos' && request.method === 'GET') {
       return sendJson(response, 200, await supabaseRequest('combos', { query: { select: 'id,name,price,combo_items(menu_item_id,quantity)', is_active: 'eq.true', order: 'name.asc' } }));
+    }
+    if (url.pathname === '/api/pos-orders' && request.method === 'GET') {
+      const orders = await supabaseRequest('orders', { query: { select: 'id,order_number,order_type,table_number,kitchen_status,total_amount,cashier_name,source,created_at,order_items(quantity,special_note,menu_items(name,category))', kitchen_status: 'neq.paid', order: 'created_at.desc', limit: '100' } });
+      return sendJson(response, 200, orders);
     }
     if (url.pathname === '/api/combos' && request.method === 'POST') {
       return sendJson(response, 201, await createCombo(await readBody(request)));
@@ -576,7 +638,10 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, 201, await createSale(await readBody(request)));
     }
     if (url.pathname === '/api/orders' && request.method === 'POST') {
-      return sendJson(response, 201, await createOrder(await readBody(request)));
+      const body = await readBody(request);
+      const session = getLoginSession(request);
+      if (session?.role === 'cashier') body.cashier_name = session.name;
+      return sendJson(response, 201, await createOrder(body));
     }
     if (url.pathname === '/api/reset-records' && request.method === 'POST') {
       return sendJson(response, 200, await resetAccountingRecords(await readBody(request)));

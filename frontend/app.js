@@ -4,16 +4,23 @@ const $ = (selector) => document.querySelector(selector);
 const API_BASE_URL = String(window.LAHAP_API_BASE || '').replace(/\/+$/, '');
 function apiUrl(url) { return /^https?:\/\//i.test(url) ? url : `${API_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`; }
 let apiAccessPromise = null;
+let loginSession = null;
 
 function formatDate(value) { return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)); }
 function showToast(message, isError = false) { const toast = $('#toast'); toast.textContent = message; toast.className = `toast show${isError ? ' error' : ''}`; setTimeout(() => { toast.className = 'toast'; }, 3000); }
 async function authorizedFetch(url, request) {
   const headers = { ...request.headers };
+  const token = loginSession?.token || localStorage.getItem('lahap-session-token');
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-  return await fetch(apiUrl(url), {
-    ...request,
-    headers
-  });
+  try {
+    return await fetch(apiUrl(url), {
+      ...request,
+      headers
+    });
+  } catch {
+    throw new Error('Tidak bisa terhubung ke server. Pastikan backend berjalan dan alamat API dapat diakses.');
+  }
 }
 async function api(url, options = {}) {
   const request = { ...options, headers: { ...(options.headers || {}) } };
@@ -538,6 +545,22 @@ async function loadFinanceControls() {
   } catch (error) { showToast(error.message, true); }
 }
 async function loadData() {
+  if (!loginSession) return false;
+  if (loginSession?.role === 'cashier') {
+    try {
+      const [menu, combos, orders] = await Promise.all([api('/api/menu'), api('/api/combos'), api('/api/pos-orders')]);
+      state.menu = menu;
+      state.combos = combos;
+      state.orders = orders.map(order => ({ ...order, status: order.kitchen_status, items: (order.order_items || []).map(item => ({ name: item.menu_items?.name || 'Menu', category: item.menu_items?.category || 'Lainnya', quantity: item.quantity, note: item.special_note })) }));
+      renderMenu();
+      renderKitchenDisplay();
+      renderCart();
+      return true;
+    } catch (error) {
+      showToast(error.message, true);
+      return false;
+    }
+  }
   if (window.location.protocol === 'file:') {
     await hydrateLocalState();
     renderMenu();
@@ -981,12 +1004,65 @@ $('#dashboard-period').value = 'all';
 setDashboardRange('all');
 $('#dashboard-period').addEventListener('change', () => { setDashboardRange($('#dashboard-period').value); renderDashboard(); });
 ['dashboard-from', 'dashboard-to'].forEach(id => $(`#${id}`).addEventListener('change', () => { if ($('#dashboard-from').value && $('#dashboard-to').value && $('#dashboard-from').value > $('#dashboard-to').value) { if (id === 'dashboard-from') $('#dashboard-to').value = $('#dashboard-from').value; else $('#dashboard-from').value = $('#dashboard-to').value; } $('#dashboard-period').value = 'custom'; renderDashboard(); }));
-function showPage(page) { const selected = pageCopy[page] ? page : 'summary'; document.body.classList.toggle('view-cash', selected === 'cash'); document.querySelectorAll('.page-view').forEach(section => section.classList.toggle('hidden', section.dataset.view !== selected)); document.querySelectorAll('.nav-link[data-page]').forEach(link => link.classList.toggle('active', link.dataset.page === selected)); $('#page-eyebrow').textContent = pageCopy[selected][0]; $('#page-title').textContent = pageCopy[selected][1]; history.replaceState(null, '', `#${selected}`); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function showPage(page) { const requested = loginSession?.role === 'cashier' ? 'orders' : page; const selected = pageCopy[requested] ? requested : 'summary'; document.body.classList.toggle('view-cash', selected === 'cash'); document.querySelectorAll('.page-view').forEach(section => section.classList.toggle('hidden', section.dataset.view !== selected)); document.querySelectorAll('.nav-link[data-page]').forEach(link => link.classList.toggle('active', link.dataset.page === selected)); $('#page-eyebrow').textContent = pageCopy[selected][0]; $('#page-title').textContent = pageCopy[selected][1]; history.replaceState(null, '', `#${selected}`); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 document.querySelectorAll('.nav-link[data-page]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); showPage(link.dataset.page); }));
-const initialPage = location.hash === '#orders' || location.hash === '#pos-cepat' ? 'orders' : location.hash === '#cash' || location.hash === '#arus-kas' ? 'cash' : location.hash === '#audit' ? 'audit' : 'summary';
-showPage(initialPage);
+showPage('summary');
 $('#featured-previous').addEventListener('click', () => stepFeaturedMenu(-1));
 $('#featured-next').addEventListener('click', () => stepFeaturedMenu(1));
 $('#featured-order-button').addEventListener('click', () => showPage('orders'));
 window.setInterval(() => { if (!document.hidden) stepFeaturedMenu(1); }, 5000);
 $('#refresh-button').addEventListener('click', async () => { const button = $('#refresh-button'); button.disabled = true; button.textContent = '↻ Memuat...'; try { const loaded = await loadData(); if (loaded !== false) { renderQuickMenu(); renderCart(); showToast('Data berhasil disegarkan.'); } } finally { button.disabled = false; button.textContent = '↻ Segarkan'; } }); $('#export-button').addEventListener('click', exportCsv); $('#export-excel-button').addEventListener('click', exportExcel); $('#backup-export').addEventListener('click', downloadBackup); $('#backup-import-trigger').addEventListener('click', () => $('#backup-import').click()); $('#backup-import').addEventListener('change', event => { const file = event.target.files[0]; if (file) restoreBackup(file); event.target.value = ''; }); $('#daily-pdf').addEventListener('click', printDailyPdf); $('#comparison-period').addEventListener('change', renderSalesAnalytics); $('#break-even-target').addEventListener('input', renderSalesAnalytics); $('#pos-cashier').value = localStorage.getItem('lahap-cashier') || 'Kasir'; $('#pos-cashier').addEventListener('change', () => localStorage.setItem('lahap-cashier', $('#pos-cashier').value.trim())); $('#tax-toggle').checked = localStorage.getItem('maji-rasa-tax-enabled') === 'true'; $('#tax-toggle').addEventListener('change', event => { localStorage.setItem('maji-rasa-tax-enabled', event.target.checked); renderInsights(); }); $('#whatsapp-closing').addEventListener('click', () => { const text = `Daily closing lahap\n${$('#closing-summary').textContent}\nPemasukan bulan ini: ${$('#monthly-revenue').textContent}\nProyeksi akhir bulan: ${$('#cash-projection').textContent}`; window.open(`https://wa.me/6285772442798?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); }); ['activity-search', 'activity-type', 'activity-date'].forEach(id => { $(`#${id}`).addEventListener(id === 'activity-search' ? 'input' : 'change', () => { renderActivities(); renderCashFlowReport(); }); }); $('#transaction-date').value = localDateTimeValue(); $('#transfer-date').value = localDateTimeValue(); $('#reconcile-date').value = localDateInput(new Date()); $('#budget-month').value = new Date().toISOString().slice(0, 7); $('#budget-month').addEventListener('change', renderFinanceTools); $('#today-label').textContent = new Intl.DateTimeFormat('id-ID', { dateStyle: 'full' }).format(new Date()); window.addEventListener('online', async () => { updateConnectionStatus(); await flushOfflineQueue(); if (window.location.protocol !== 'file:') await loadData(); }); window.addEventListener('offline', updateConnectionStatus); updateBackupStatus(); updateConnectionStatus(); loadData().then(() => { renderQuickMenu(); renderCart(); updateBackupStatus(); });
+$('#login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = event.submitter;
+  const role = $('input[name="login-role"]:checked').value;
+  const name = $('#login-name').value.trim();
+  const pin = $('#login-pin').value;
+  $('#login-error').textContent = '';
+  submit.disabled = true;
+  try {
+    const session = await api('/api/login', { method: 'POST', body: { role, name, pin } });
+    loginSession = session;
+    localStorage.setItem('lahap-session-token', session.token);
+    $('#login-pin').value = '';
+    startAppForSession();
+  } catch (error) {
+    $('#login-error').textContent = error.message;
+  } finally {
+    submit.disabled = false;
+  }
+});
+function startAppForSession() {
+  if (!loginSession) return;
+  document.body.classList.toggle('cashier-mode', loginSession.role === 'cashier');
+  $('#login-screen').classList.add('hidden');
+  $('.app-shell').classList.remove('hidden');
+  $('#page-eyebrow').textContent = loginSession.role === 'cashier' ? 'lahap · Kasir' : 'lahap · Papan kendali';
+  $('#page-title').textContent = loginSession.role === 'cashier' ? `Siap melayani, ${loginSession.name}.` : 'Rasa hangat, kas tetap rapi.';
+  $('#pos-cashier').value = loginSession.name;
+  showPage(loginSession.role === 'cashier' ? 'orders' : 'summary');
+  loadData().then(() => { renderQuickMenu(); renderCart(); updateBackupStatus(); });
+  updateConnectionStatus();
+}
+$('#logout-button').addEventListener('click', async () => {
+  try { await api('/api/logout', { method: 'POST', body: {} }); } catch {}
+  loginSession = null;
+  localStorage.removeItem('lahap-session-token');
+  location.reload();
+});
+async function restoreLoginSession() {
+  const token = localStorage.getItem('lahap-session-token');
+  if (!token) return;
+  loginSession = { token };
+  try {
+    const current = await api('/api/session');
+    loginSession = { token, ...current };
+    startAppForSession();
+  } catch {
+    loginSession = null;
+    localStorage.removeItem('lahap-session-token');
+  }
+}
+$('.app-shell').classList.add('hidden');
+updateBackupStatus();
+restoreLoginSession();

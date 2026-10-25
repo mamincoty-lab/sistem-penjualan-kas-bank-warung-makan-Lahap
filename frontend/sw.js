@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lahap-shell-v8';
+const CACHE_NAME = 'lahap-shell-v10';
 const APP_BASE = new URL('.', self.registration.scope).pathname;
 const APP_SHELL = ['', 'index.html', 'styles.css', 'config.js', 'app.js', 'logo%20lahap.png'].map(path => new URL(path, self.registration.scope).pathname);
 

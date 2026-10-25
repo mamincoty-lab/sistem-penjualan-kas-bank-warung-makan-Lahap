@@ -13,7 +13,24 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-shell">
+  <main id="login-screen" class="login-screen">
+    <section class="login-panel">
+      <div class="login-brand"><img alt="" src="logo%20lahap.png"><span>lahap!</span></div>
+      <p class="eyebrow">Rasa rumahan, setiap hari</p>
+      <h1>Selamat datang kembali.</h1>
+      <p class="login-copy">Masuk untuk mulai mengelola warung hari ini.</p>
+      <form id="login-form" class="login-form">
+        <fieldset class="role-picker"><legend>Masuk sebagai</legend><label><input type="radio" name="login-role" value="owner" checked><span>Owner</span></label><label><input type="radio" name="login-role" value="cashier"><span>Kasir</span></label></fieldset>
+        <label>Nama<input id="login-name" autocomplete="name" placeholder="Nama Anda" required></label>
+        <label>PIN<input id="login-pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Masukkan PIN" required></label>
+        <p id="login-error" class="login-error" role="alert"></p>
+        <button class="login-submit" type="submit">Masuk <span>→</span></button>
+      </form>
+      <small class="login-footnote">Akses kasir dan owner dikelola terpisah.</small>
+    </section>
+    <aside class="login-aside"><div><p class="eyebrow">lahap · operasional warung</p><strong>Hangat di meja.<br>Rapi di balik layar.</strong><span>Penjualan, kas, dan aktivitas harian dalam satu tempat.</span></div><div class="login-aside-bottom">Sistem penjualan & pengelolaan usaha</div></aside>
+  </main>
+  <div class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand"><img class="brand-logo" alt=""><span class="brand-name">Lahap!</span></div>
       <script>document.querySelector('.brand-logo').src = new URL(location.pathname.includes('/frontend/') ? '../logo%20lahap.png' : 'logo%20lahap.png', location.href);</script>
@@ -28,7 +45,7 @@
     </aside>
 
     <main class="main-content">
-      <header class="topbar"><div><p class="eyebrow" id="page-eyebrow">lahap · Papan kendali</p><h1 id="page-title">Rasa hangat, kas tetap rapi.</h1></div><div class="status-pill"><i></i><span id="connection-state">Sistem aktif</span></div></header>
+      <header class="topbar"><div><p class="eyebrow" id="page-eyebrow">lahap · Papan kendali</p><h1 id="page-title">Rasa hangat, kas tetap rapi.</h1></div><div class="topbar-actions"><div class="status-pill"><i></i><span id="connection-state">Sistem aktif</span></div><button id="logout-button" class="logout-button" type="button">Keluar</button></div></header>
       <section id="ringkasan" class="section-block page-view" data-view="summary">
         <article class="dashboard-feature" aria-label="Menu pilihan Lahap">
           <div class="dashboard-feature-copy"><p class="eyebrow">Menu pilihan Lahap <span id="featured-category">Makanan</span></p><h2 id="featured-menu-name">Menyiapkan menu...</h2><strong id="featured-menu-price" class="featured-price"></strong><button class="featured-order-button" id="featured-order-button" type="button">Pesan sekarang <span>→</span></button></div>
