@@ -44,7 +44,6 @@ Isi `.env` dengan format berikut:
 SUPABASE_URL=https://project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=service-role-key-anda
 OWNER_APPROVAL_PIN=pin-owner-sekaligus-login-owner
-CASHIER_LOGIN_PIN=pin-login-kasir
 SESSION_SECRET=isi-dengan-random-string-panjang
 ```
 
@@ -52,9 +51,9 @@ SESSION_SECRET=isi-dengan-random-string-panjang
 
 Gunakan `service_role` key hanya di `.env` backend. Jangan pernah memasukkannya ke frontend atau membagikannya. Jika key pernah terekspos, segera rotasi dari Supabase Dashboard.
 
-Login memakai nama dan PIN. Owner menggunakan `OWNER_APPROVAL_PIN`, sedangkan kasir menggunakan `CASHIER_LOGIN_PIN`; PIN kasir harus berbeda dan disimpan hanya di `.env`. PIN owner juga dipakai untuk persetujuan tindakan sensitif. `SESSION_SECRET` digunakan untuk menandatangani sesi login (jika tidak diisi, backend memakai `SUPABASE_SERVICE_ROLE_KEY`). Sesi berlaku 12 jam dan diverifikasi oleh backend. Kasir hanya dapat membuka POS, sementara laporan dan pengelolaan kas hanya tersedia untuk owner.
+Halaman awal menyediakan pilihan langsung ke tampilan Owner atau Kasir tanpa PIN maupun kata sandi. Pilihan ini hanya membedakan tampilan dan bukan mekanisme keamanan; gunakan hanya pada lingkungan tepercaya. PIN owner (`OWNER_APPROVAL_PIN`) tetap digunakan untuk persetujuan tindakan sensitif. `SESSION_SECRET` digunakan untuk menandatangani sesi (jika tidak diisi, backend memakai `SUPABASE_SERVICE_ROLE_KEY`). Sesi berlaku 12 jam. Tampilan kasir berfokus pada POS; owner memiliki dashboard dan administrasi.
 
-Untuk demo GitHub Pages, deploy ulang backend Vercel setelah perubahan login ini. `CORS_ORIGINS` di Vercel harus mengizinkan `https://mamincoty-lab.github.io`; backend juga harus memiliki `OWNER_APPROVAL_PIN`, `CASHIER_LOGIN_PIN`, dan kredensial Supabase yang valid.
+Untuk demo GitHub Pages, deploy ulang backend Vercel setelah perubahan ini. `CORS_ORIGINS` di Vercel harus mengizinkan `https://mamincoty-lab.github.io`; backend juga harus memiliki `OWNER_APPROVAL_PIN` dan kredensial Supabase yang valid.
 
 Untuk memasang fitur **Reset pencatatan**, jalankan ulang seluruh `backend/schema.sql` di Supabase SQL Editor setelah memperbarui aplikasi. Tombol Reset pencatatan menghapus transaksi, penjualan, pesanan, hutang/piutang, anggaran, rekonsiliasi, dan penutupan kas; menu, pengaturan, serta audit log tetap tersimpan. Tindakan ini memerlukan PIN owner dan tidak dapat dibatalkan.
 

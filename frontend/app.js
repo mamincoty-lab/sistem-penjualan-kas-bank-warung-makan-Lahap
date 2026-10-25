@@ -1012,26 +1012,22 @@ $('#featured-next').addEventListener('click', () => stepFeaturedMenu(1));
 $('#featured-order-button').addEventListener('click', () => showPage('orders'));
 window.setInterval(() => { if (!document.hidden) stepFeaturedMenu(1); }, 5000);
 $('#refresh-button').addEventListener('click', async () => { const button = $('#refresh-button'); button.disabled = true; button.textContent = '↻ Memuat...'; try { const loaded = await loadData(); if (loaded !== false) { renderQuickMenu(); renderCart(); showToast('Data berhasil disegarkan.'); } } finally { button.disabled = false; button.textContent = '↻ Segarkan'; } }); $('#export-button').addEventListener('click', exportCsv); $('#export-excel-button').addEventListener('click', exportExcel); $('#backup-export').addEventListener('click', downloadBackup); $('#backup-import-trigger').addEventListener('click', () => $('#backup-import').click()); $('#backup-import').addEventListener('change', event => { const file = event.target.files[0]; if (file) restoreBackup(file); event.target.value = ''; }); $('#daily-pdf').addEventListener('click', printDailyPdf); $('#comparison-period').addEventListener('change', renderSalesAnalytics); $('#break-even-target').addEventListener('input', renderSalesAnalytics); $('#pos-cashier').value = localStorage.getItem('lahap-cashier') || 'Kasir'; $('#pos-cashier').addEventListener('change', () => localStorage.setItem('lahap-cashier', $('#pos-cashier').value.trim())); $('#tax-toggle').checked = localStorage.getItem('maji-rasa-tax-enabled') === 'true'; $('#tax-toggle').addEventListener('change', event => { localStorage.setItem('maji-rasa-tax-enabled', event.target.checked); renderInsights(); }); $('#whatsapp-closing').addEventListener('click', () => { const text = `Daily closing lahap\n${$('#closing-summary').textContent}\nPemasukan bulan ini: ${$('#monthly-revenue').textContent}\nProyeksi akhir bulan: ${$('#cash-projection').textContent}`; window.open(`https://wa.me/6285772442798?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); }); ['activity-search', 'activity-type', 'activity-date'].forEach(id => { $(`#${id}`).addEventListener(id === 'activity-search' ? 'input' : 'change', () => { renderActivities(); renderCashFlowReport(); }); }); $('#transaction-date').value = localDateTimeValue(); $('#transfer-date').value = localDateTimeValue(); $('#reconcile-date').value = localDateInput(new Date()); $('#budget-month').value = new Date().toISOString().slice(0, 7); $('#budget-month').addEventListener('change', renderFinanceTools); $('#today-label').textContent = new Intl.DateTimeFormat('id-ID', { dateStyle: 'full' }).format(new Date()); window.addEventListener('online', async () => { updateConnectionStatus(); await flushOfflineQueue(); if (window.location.protocol !== 'file:') await loadData(); }); window.addEventListener('offline', updateConnectionStatus); updateBackupStatus(); updateConnectionStatus(); loadData().then(() => { renderQuickMenu(); renderCart(); updateBackupStatus(); });
-$('#login-form').addEventListener('submit', async event => {
-  event.preventDefault();
-  const submit = event.submitter;
-  const role = $('input[name="login-role"]:checked').value;
-  const name = $('#login-name').value.trim();
-  const pin = $('#login-pin').value;
+async function enterDashboard(role, button) {
   $('#login-error').textContent = '';
-  submit.disabled = true;
+  button.disabled = true;
   try {
-    const session = await api('/api/login', { method: 'POST', body: { role, name, pin } });
+    const session = await api('/api/login', { method: 'POST', body: { role } });
     loginSession = session;
     localStorage.setItem('lahap-session-token', session.token);
-    $('#login-pin').value = '';
     startAppForSession();
   } catch (error) {
     $('#login-error').textContent = error.message;
   } finally {
-    submit.disabled = false;
+    button.disabled = false;
   }
-});
+}
+$('#owner-entry').addEventListener('click', event => enterDashboard('owner', event.currentTarget));
+$('#cashier-entry').addEventListener('click', event => enterDashboard('cashier', event.currentTarget));
 function startAppForSession() {
   if (!loginSession) return;
   document.body.classList.toggle('cashier-mode', loginSession.role === 'cashier');

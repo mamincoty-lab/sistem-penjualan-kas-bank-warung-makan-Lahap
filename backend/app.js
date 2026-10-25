@@ -21,7 +21,6 @@ const PORT = Number(process.env.PORT || 3000);
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const OWNER_APPROVAL_PIN = process.env.OWNER_APPROVAL_PIN || '';
-const CASHIER_LOGIN_PIN = process.env.CASHIER_LOGIN_PIN || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || SUPABASE_SERVICE_ROLE_KEY || OWNER_APPROVAL_PIN;
 const API_ACCESS_PIN = process.env.API_ACCESS_PIN || '';
 const API_ACCESS_REQUIRED = false;
@@ -549,10 +548,8 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === '/api/login' && request.method === 'POST') {
       const body = await readBody(request);
       const role = String(body.role || '');
-      const name = String(body.name || '').trim();
-      const pin = String(body.pin || '');
-      const expectedPin = role === 'owner' ? OWNER_APPROVAL_PIN : role === 'cashier' ? CASHIER_LOGIN_PIN : '';
-      if (!name || !expectedPin || !matchesSecret(pin, expectedPin)) return sendJson(response, 401, { error: 'Nama, PIN, atau peran tidak valid.' });
+      if (!['owner', 'cashier'].includes(role)) return sendJson(response, 400, { error: 'Pilih tampilan owner atau kasir.' });
+      const name = String(body.name || (role === 'owner' ? 'Owner' : 'Kasir')).trim();
       return sendJson(response, 200, createLoginSession(role, name));
     }
     if (url.pathname === '/api/session' && request.method === 'GET') {

@@ -17,16 +17,14 @@
     <section class="login-panel">
       <div class="login-brand"><img alt="" src="logo%20lahap.png"><span>lahap!</span></div>
       <p class="eyebrow">Rasa rumahan, setiap hari</p>
-      <h1>Selamat datang kembali.</h1>
-      <p class="login-copy">Masuk untuk mulai mengelola warung hari ini.</p>
-      <form id="login-form" class="login-form">
-        <fieldset class="role-picker"><legend>Masuk sebagai</legend><label><input type="radio" name="login-role" value="owner" checked><span>Owner</span></label><label><input type="radio" name="login-role" value="cashier"><span>Kasir</span></label></fieldset>
-        <label>Nama<input id="login-name" autocomplete="name" placeholder="Nama Anda" required></label>
-        <label>PIN<input id="login-pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Masukkan PIN" required></label>
+      <h1>Pilih dashboard.</h1>
+      <p class="login-copy">Pilih tampilan untuk mulai menggunakan lahap.</p>
+      <div class="role-entry-list">
+        <button id="owner-entry" class="role-entry-button" type="button"><span class="role-entry-icon">O</span><span><strong>Owner</strong><small>Dashboard dan administrasi usaha</small></span><span class="role-entry-arrow">→</span></button>
+        <button id="cashier-entry" class="role-entry-button" type="button"><span class="role-entry-icon cashier-icon">K</span><span><strong>Kasir</strong><small>Pesanan dan transaksi POS</small></span><span class="role-entry-arrow">→</span></button>
         <p id="login-error" class="login-error" role="alert"></p>
-        <button class="login-submit" type="submit">Masuk <span>→</span></button>
-      </form>
-      <small class="login-footnote">Akses kasir dan owner dikelola terpisah.</small>
+      </div>
+      <small class="login-footnote">Pilih sesuai tampilan yang ingin dibuka.</small>
     </section>
     <aside class="login-aside"><div><p class="eyebrow">lahap · operasional warung</p><strong>Hangat di meja.<br>Rapi di balik layar.</strong><span>Penjualan, kas, dan aktivitas harian dalam satu tempat.</span></div><div class="login-aside-bottom">Sistem penjualan & pengelolaan usaha</div></aside>
   </main>

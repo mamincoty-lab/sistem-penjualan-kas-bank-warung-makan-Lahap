@@ -522,9 +522,17 @@ body { color: var(--ink); background: linear-gradient(145deg, #eee9f4 0%, #f7f3f
 .login-panel > .eyebrow { color: #805095; }
 .login-panel h1 { margin: 0; color: var(--ink); font: 600 36px/1.12 Fraunces, serif; letter-spacing: 0; }
 .login-copy { margin: 11px 0 30px; color: var(--muted); font-size: 14px; }
-.login-form { display: grid; gap: 17px; }
-.login-form > label { color: #6d716a; }
-.login-form input:not([type="radio"]) { min-height: 49px; border-color: #dedbd0; background: #fffefa; }
+.role-entry-list { display: grid; gap: 11px; }
+.role-entry-button { display: grid; grid-template-columns: 46px minmax(0, 1fr) 22px; align-items: center; gap: 13px; min-height: 76px; padding: 12px 15px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--white); text-align: left; cursor: pointer; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+.role-entry-button:hover { transform: translateY(-1px); border-color: #b99bc6; box-shadow: 0 8px 18px rgba(74, 54, 87, .09); }
+.role-entry-button:focus-visible { outline: 2px solid #8e5ca3; outline-offset: 2px; }
+.role-entry-button:disabled { opacity: .65; cursor: wait; }
+.role-entry-icon { display: grid; width: 42px; aspect-ratio: 1; place-items: center; border-radius: 7px; color: #fffaff; background: #86549b; font: 600 19px Fraunces, serif; }
+.role-entry-icon.cashier-icon { color: #35513d; background: #dce9df; }
+.role-entry-button strong, .role-entry-button small { display: block; }
+.role-entry-button strong { font: 600 16px Fraunces, serif; }
+.role-entry-button small { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.role-entry-arrow { color: #805095; font-size: 18px; text-align: right; }
 .role-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px; margin: 0 0 2px; border: 1px solid #dedbd0; border-radius: 8px; }
 .role-picker legend { padding: 0 6px; color: #72756f; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .role-picker label { position: relative; display: block; cursor: pointer; }
