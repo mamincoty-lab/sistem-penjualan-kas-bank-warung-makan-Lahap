@@ -259,6 +259,31 @@ function renderKitchenDisplay() {
   const active = (state.orders || []).filter(order => order.status !== 'paid').slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   $('#kitchen-display').innerHTML = active.length ? active.map(order => `<div class="kitchen-order"><strong>Meja ${order.table_number || 'Takeaway'} · ${order.source || 'Walk in'}</strong><small>${new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(new Date(order.created_at))}</small><small>${order.items.map(item => `${item.name} x${item.quantity}${item.note ? ` (${item.note})` : ''}`).join(', ')}</small><div class="kitchen-order-actions"><button class="primary-small-button" data-kitchen-id="${order.id}" data-kitchen-status="in_kitchen" type="button">Masuk dapur</button><button class="outline-button" data-kitchen-id="${order.id}" data-kitchen-status="served" type="button">Siap</button><button class="danger-button" data-kitchen-id="${order.id}" data-kitchen-status="paid" type="button">Lunas</button></div></div>`).join('') : '<p class="empty-state">Tidak ada pesanan masuk.</p>';
 }
+$('#kitchen-display').addEventListener('click', async event => {
+  const button = event.target.closest('[data-kitchen-id][data-kitchen-status]');
+  if (!button) return;
+  const order = state.orders.find(item => String(item.id) === button.dataset.kitchenId);
+  if (!order) return;
+  const previousStatus = order.status;
+  const nextStatus = button.dataset.kitchenStatus;
+  button.disabled = true;
+  try {
+    if (isLocalMode()) {
+      order.status = nextStatus;
+      saveLocalData();
+    } else {
+      await api(`/api/orders/${encodeURIComponent(order.id)}/kitchen-status`, { method: 'PATCH', body: { kitchen_status: nextStatus } });
+      order.status = nextStatus;
+    }
+    renderKitchenDisplay();
+    showToast(nextStatus === 'in_kitchen' ? 'Pesanan masuk dapur.' : nextStatus === 'served' ? 'Pesanan siap disajikan.' : 'Pesanan ditandai lunas.');
+  } catch (error) {
+    order.status = previousStatus;
+    showToast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
 function cartSubtotal() { return state.cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0); }
 function cartTotals() { const subtotal = cartSubtotal(); const type = $('#discount-type').value; const value = Number($('#discount-value').value || 0); const discount = type === 'percent' ? subtotal * Math.min(value, 100) / 100 : type === 'amount' ? Math.min(value, subtotal) : 0; return { subtotal, discount, tax: 0, service: 0, total: Math.round(subtotal - discount) }; }
 function renderCart() { const totals = cartTotals(); $('#cart-count').textContent = `${state.cart.reduce((sum, item) => sum + item.quantity, 0)} item`; $('#cart-items').innerHTML = state.cart.length ? state.cart.map(item => `<div class="cart-row"><div><strong>${item.name}</strong><br><small>${currency.format(item.price)} x ${item.quantity}</small><br><input class="cart-note" data-id="${item.id}" value="${item.note || ''}" placeholder="Catatan item"></div><button type="button" class="remove-cart" data-id="${item.id}">×</button></div>`).join('') : '<p class="empty-state">Pilih menu untuk mulai.</p>'; $('#cart-subtotal').textContent = currency.format(totals.subtotal); $('#cart-discount').textContent = `- ${currency.format(totals.discount)}`; $('#cart-total').textContent = currency.format(totals.total); const received = Number($('#cash-received').value || 0); $('#change-label').textContent = `Kembalian: ${currency.format(Math.max(received - totals.total, 0))}`; }
@@ -547,11 +572,22 @@ async function loadFinanceControls() {
 async function loadData() {
   if (!loginSession) return false;
   if (loginSession?.role === 'cashier') {
+    if (isLocalMode()) {
+      await hydrateLocalState();
+      renderMenu();
+      renderKitchenDisplay();
+      renderCart();
+      renderCashierClosingHistory();
+      updateConnectionStatus();
+      return true;
+    }
     try {
-      const [menu, combos, orders] = await Promise.all([api('/api/menu'), api('/api/combos'), api('/api/pos-orders')]);
+      const [menu, combos, orders, closings] = await Promise.all([api('/api/menu'), api('/api/combos'), api('/api/pos-orders'), api('/api/cash-closings')]);
       state.menu = menu;
       state.combos = combos;
+      state.closings = closings;
       state.orders = orders.map(order => ({ ...order, status: order.kitchen_status, items: (order.order_items || []).map(item => ({ name: item.menu_items?.name || 'Menu', category: item.menu_items?.category || 'Lainnya', quantity: item.quantity, note: item.special_note })) }));
+      renderCashierClosingHistory();
       renderMenu();
       renderKitchenDisplay();
       renderCart();
@@ -945,6 +981,44 @@ $('#cash-closing-form').addEventListener('submit', async event => {
   } catch (error) { showToast(error.message, true); }
 });
 
+function renderCashierClosingHistory() {
+  const escapeHtml = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+  const closings = (state.closings || []).slice().sort((a, b) => new Date(b.closed_at) - new Date(a.closed_at)).slice(0, 5);
+  $('#cashier-closing-history').innerHTML = closings.map(item => `<div class="finance-list-row"><strong>${formatDate(item.closed_at)} · Selisih ${currency.format(item.difference)}</strong><small>Expected ${currency.format(item.expected_cash)} · Aktual ${currency.format(item.actual_cash)}${item.note ? ` · ${escapeHtml(item.note)}` : ''}</small></div>`).join('') || '<p class="empty-state">Belum ada penutupan shift tersimpan.</p>';
+}
+
+$('#cashier-closing-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const actor = loginSession?.name || $('#cashier-closing-name').value.trim();
+  const payload = { actor, actual_cash: Number($('#cashier-closing-actual').value), note: $('#cashier-closing-note').value.trim() };
+  if (!Number.isFinite(payload.actual_cash) || payload.actual_cash < 0) return showToast('Masukkan jumlah kas aktual yang valid.', true);
+  const button = event.submitter;
+  button.disabled = true;
+  try {
+    let closing;
+    if (isLocalMode()) {
+      const expected = accountBalance('Kas');
+      closing = { id: Date.now(), cashier_name: actor, actual_cash: payload.actual_cash, expected_cash: expected, difference: payload.actual_cash - expected, note: payload.note, closed_at: new Date().toISOString() };
+      state.closings.unshift(closing);
+      queueOfflineOperation('/api/cash-closings', payload);
+      saveLocalData();
+    } else {
+      closing = await api('/api/cash-closings', { method: 'POST', body: payload });
+    }
+    state.closings.unshift(closing);
+    renderCashierClosingHistory();
+    $('#cashier-closing-result').innerHTML = `<strong>Expected ${currency.format(closing.expected_cash)} · Aktual ${currency.format(closing.actual_cash)} · Selisih ${currency.format(closing.difference)}</strong>`;
+    $('#cashier-closing-result').classList.remove('hidden');
+    $('#cashier-closing-actual').value = '';
+    $('#cashier-closing-note').value = '';
+    showToast('Penutupan kasir tersimpan.');
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $('#debt-form').addEventListener('submit', async event => {
   event.preventDefault();
   const payload = { debt_type: $('#debt-type').value, party_name: $('#debt-party').value.trim(), description: $('#debt-description').value.trim(), amount: Number($('#debt-amount').value), due_date: $('#debt-due').value || null, account: $('#debt-account').value };
@@ -1036,6 +1110,7 @@ function startAppForSession() {
   $('#page-eyebrow').textContent = loginSession.role === 'cashier' ? 'lahap · Kasir' : 'lahap · Papan kendali';
   $('#page-title').textContent = loginSession.role === 'cashier' ? `Siap melayani, ${loginSession.name}.` : 'Rasa hangat, kas tetap rapi.';
   $('#pos-cashier').value = loginSession.name;
+  $('#cashier-closing-name').value = loginSession.name;
   showPage(loginSession.role === 'cashier' ? 'orders' : 'summary');
   loadData().then(() => { renderQuickMenu(); renderCart(); updateBackupStatus(); });
   updateConnectionStatus();

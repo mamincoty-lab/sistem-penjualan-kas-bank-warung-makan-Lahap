@@ -62,11 +62,13 @@ function getLoginSession(request) {
 }
 
 function cashierCanAccess(request, pathname, body) {
-  if (request.method === 'GET' && ['/api/menu', '/api/combos', '/api/pos-orders', '/api/session'].includes(pathname)) return true;
+  if (request.method === 'GET' && ['/api/menu', '/api/combos', '/api/pos-orders', '/api/cash-closings', '/api/session'].includes(pathname)) return true;
   if (request.method === 'POST' && pathname === '/api/orders') return true;
+  if (request.method === 'POST' && pathname === '/api/cash-closings') return true;
+  if (request.method === 'PATCH' && /^\/api\/orders\/\d+\/kitchen-status$/.test(pathname)) return true;
   return request.method === 'POST' && pathname === '/api/sync'
     && Array.isArray(body?.operations)
-    && body.operations.every(operation => operation.endpoint === '/api/orders');
+    && body.operations.every(operation => operation.endpoint === '/api/orders' || /^\/api\/orders\/\d+\/kitchen-status$/.test(operation.endpoint));
 }
 
 function readBody(request) {
@@ -478,6 +480,7 @@ async function replayOfflineOperations(operations) {
       const endpoint = operation.endpoint.replace(/(\/api\/(?:cash-bank|sales)\/)([\d.]+)(?=\/)/, (match, prefix, id) => `${prefix}${idMap.get(id) || id}`);
       let result;
       if (endpoint === '/api/orders') result = await createOrder(body);
+      else if (endpoint.match(/^\/api\/orders\/(\d+)\/kitchen-status$/)) result = await supabaseRequest('orders', { method: 'PATCH', query: { id: `eq.${endpoint.match(/^\/api\/orders\/(\d+)\/kitchen-status$/)[1]}` }, body: { kitchen_status: body.kitchen_status } });
       else if (endpoint === '/api/cash-bank') {
         const localId = body.id;
         delete body.id;
@@ -640,6 +643,14 @@ const server = http.createServer(async (request, response) => {
       if (session?.role === 'cashier') body.cashier_name = session.name;
       return sendJson(response, 201, await createOrder(body));
     }
+    if (url.pathname.match(/^\/api\/orders\/\d+\/kitchen-status$/) && request.method === 'PATCH') {
+      const body = await readBody(request);
+      if (!['open', 'in_kitchen', 'served', 'paid'].includes(body.kitchen_status)) throw new Error('Status dapur tidak valid.');
+      const orderId = url.pathname.split('/')[3];
+      const updated = await supabaseRequest('orders', { method: 'PATCH', prefer: 'return=representation', query: { id: `eq.${orderId}` }, body: { kitchen_status: body.kitchen_status } });
+      if (!updated.length) throw new Error('Pesanan tidak ditemukan.');
+      return sendJson(response, 200, updated[0]);
+    }
     if (url.pathname === '/api/reset-records' && request.method === 'POST') {
       return sendJson(response, 200, await resetAccountingRecords(await readBody(request)));
     }
@@ -652,8 +663,18 @@ const server = http.createServer(async (request, response) => {
     }
     if (url.pathname === '/api/transfers' && request.method === 'POST') return sendJson(response, 201, await createAccountTransfer(await readBody(request)));
     if (url.pathname === '/api/bank-reconciliations' && request.method === 'POST') return sendJson(response, 201, await createBankReconciliation(await readBody(request)));
-    if (url.pathname === '/api/cash-closings' && request.method === 'GET') return sendJson(response, 200, await supabaseRequest('cash_closings', { query: { select: '*', order: 'closed_at.desc', limit: '100' } }));
-    if (url.pathname === '/api/cash-closings' && request.method === 'POST') return sendJson(response, 201, await createCashClosing(await readBody(request)));
+    if (url.pathname === '/api/cash-closings' && request.method === 'GET') {
+      const session = getLoginSession(request);
+      const query = { select: '*', order: 'closed_at.desc', limit: '100' };
+      if (session?.role === 'cashier') query.cashier_name = `eq.${session.name}`;
+      return sendJson(response, 200, await supabaseRequest('cash_closings', { query }));
+    }
+    if (url.pathname === '/api/cash-closings' && request.method === 'POST') {
+      const body = await readBody(request);
+      const session = getLoginSession(request);
+      if (session?.role === 'cashier') body.actor = session.name;
+      return sendJson(response, 201, await createCashClosing(body));
+    }
     if (url.pathname === '/api/debts' && request.method === 'GET') return sendJson(response, 200, await supabaseRequest('debts', { query: { select: '*', order: 'created_at.desc', limit: '500' } }));
     if (url.pathname === '/api/debts' && request.method === 'POST') return sendJson(response, 201, await createDebt(await readBody(request)));
     if (url.pathname.match(/^\/api\/debts\/[^/]+\/settle$/) && request.method === 'POST') return sendJson(response, 200, await settleDebt(url.pathname.split('/')[3], await readBody(request)));

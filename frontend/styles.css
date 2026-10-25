@@ -561,5 +561,12 @@ body { color: var(--ink); background: linear-gradient(145deg, #eee9f4 0%, #f7f3f
 .cashier-mode #refresh-button, .cashier-mode .status-pill { display: none; }
 .cashier-mode .menu-favorite, .cashier-mode .menu-delete, .cashier-mode .menu-edit { display: none !important; }
 .cashier-mode .sidebar nav { justify-content: end; }
+.cashier-closing-panel { margin-top: 22px; padding: 20px; }
+body:not(.cashier-mode) .cashier-closing-panel { display: none; }
+.cashier-closing-panel .panel-heading { margin-bottom: 14px; }
+.cashier-closing-panel h3 { margin: 0; color: var(--ink); font-size: 17px; }
+.cashier-closing-panel .form-grid { gap: 12px; }
+.cashier-closing-panel input[readonly] { color: var(--muted); background: #f2eef5; }
+.cashier-closing-panel .finance-list { max-height: 220px; overflow: auto; }
 @media (max-width: 800px) { .login-screen { grid-template-columns: minmax(0, 1fr); }.login-panel { width: min(100%, 490px); padding: 42px 28px; }.login-brand { margin-bottom: 42px; }.login-aside { min-height: 250px; padding: 32px 28px; }.login-aside strong { font-size: 32px; }.login-aside-bottom { display: none; } }
 @media (max-width: 480px) { .login-panel { padding: 32px 22px; }.login-panel h1 { font-size: 31px; }.login-aside { min-height: 210px; }.topbar-actions { width: 100%; justify-content: space-between; } }
