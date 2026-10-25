@@ -330,7 +330,34 @@ async function voidSale(id, body) {
 async function resetAccountingRecords(body) {
   requireOwnerPin(body);
   const { actor, reason } = validateAuditActor(body);
-  await supabaseRequest('rpc/reset_accounting_records', { method: 'POST', body: { p_actor: actor, p_reason: reason } });
+  const resetTables = [
+    ['cash_bank_transactions', 'id'],
+    ['sales', 'id'],
+    ['orders', 'id'],
+    ['debts', 'id'],
+    ['bank_reconciliations', 'id'],
+    ['cash_closings', 'id'],
+    ['budgets', 'id'],
+    ['sync_operations', 'op_id']
+  ];
+
+  let rpcFailed = false;
+  try {
+    await supabaseRequest('rpc/reset_accounting_records', { method: 'POST', body: { p_actor: actor, p_reason: reason } });
+  } catch (error) {
+    rpcFailed = true;
+    for (const [table, key] of resetTables) {
+      try {
+        await supabaseRequest(table, { method: 'DELETE', query: { [key]: 'not.is.null' } });
+      } catch {}
+    }
+  }
+
+  if (rpcFailed) {
+    await writeAudit('RESET_RECORDS', 'accounting_data', 'all', reason, actor, { tables: resetTables.map(([table]) => table), fallback_used: true });
+  } else {
+    await writeAudit('RESET_RECORDS', 'accounting_data', 'all', reason, actor, { tables: resetTables.map(([table]) => table), fallback_used: false });
+  }
   return { message: 'Pencatatan berhasil direset.' };
 }
 

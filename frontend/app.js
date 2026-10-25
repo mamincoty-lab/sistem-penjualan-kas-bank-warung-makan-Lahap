@@ -824,23 +824,48 @@ function closeApproval(result) {
 $('#menu-image-file').addEventListener('change', async (event) => { const file = event.target.files[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { event.target.value = ''; return showToast('Ukuran foto maksimal 2 MB.', true); } try { selectedMenuImage = await compressImage(file); showMenuImagePreview(selectedMenuImage); } catch { showToast('Foto tidak dapat dibaca.', true); } });
 $('#reset-records-button').addEventListener('click', async event => {
   const button = event.currentTarget;
-  if (window.location.protocol === 'file:' || !navigator.onLine || state.pendingSync.length || loadLocalData().pendingSync.length) return showToast('Reset harus dilakukan saat online setelah semua perubahan tersinkron.', true);
-  const confirmed = window.confirm('Semua transaksi, penjualan, pesanan, hutang/piutang, anggaran, rekonsiliasi, dan penutupan kas akan dihapus. Menu dan pengaturan tetap. Lanjutkan?');
-  if (!confirmed) return;
+  const firstConfirm = window.confirm('Reset pencatatan akan menghapus semua data keuangan: transaksi, penjualan, pesanan, hutang/piutang, anggaran, rekonsiliasi, dan penutupan kas. Menu tetap aman. Apakah Anda yakin?');
+  if (!firstConfirm) return;
+
+  const secondConfirm = window.confirm('Konfirmasi akhir: semua saldo akan dimulai dari nol setelah reset. Data yang sudah masuk akan dihapus. Lanjutkan?');
+  if (!secondConfirm) return;
+
   const approval = await requestOwnerApproval('Reset pencatatan', 'Masukkan PIN owner, nama pelaku, dan alasan. Tindakan ini menghapus seluruh pencatatan keuangan.');
   if (!approval) return;
   button.disabled = true;
   try {
+    const localReset = () => {
+      for (const key of ['sales', 'cashBank', 'orders', 'auditLogs', 'reconciliations', 'closings', 'debts', 'budgets', 'pendingSync']) state[key] = [];
+      localStorage.setItem('lahap-offline-mode', 'false');
+      localStorage.removeItem('lahap-offline-mode');
+      saveLocalData();
+    };
+
+    if (isLocalMode() || !API_BASE_URL) {
+      localReset();
+      await clearAutomaticSnapshots();
+      renderMenu();
+      renderKitchenDisplay();
+      renderDashboard();
+      showToast('Pencatatan direset. Saldo sekarang mulai dari Rp 0.');
+      return;
+    }
+
     await api('/api/reset-records', { method: 'POST', body: approval });
-    for (const key of ['sales', 'cashBank', 'orders', 'auditLogs', 'reconciliations', 'closings', 'debts', 'budgets', 'pendingSync']) state[key] = [];
-    localStorage.removeItem('lahap-offline-mode');
-    saveLocalData();
+    localReset();
     await clearAutomaticSnapshots();
     const loaded = await loadData();
     if (loaded === false) showToast('Pencatatan di server sudah direset, tetapi data terbaru belum bisa dimuat.', true);
     else showToast('Pencatatan direset. Saldo sekarang mulai dari Rp 0.');
   } catch (error) {
-    showToast(error.message, true);
+    const localReset = () => {
+      for (const key of ['sales', 'cashBank', 'orders', 'auditLogs', 'reconciliations', 'closings', 'debts', 'budgets', 'pendingSync']) state[key] = [];
+      localStorage.removeItem('lahap-offline-mode');
+      saveLocalData();
+    };
+    localReset();
+    renderDashboard();
+    showToast(error.message || 'Reset gagal, data lokal sudah dibersihkan.', true);
   } finally {
     button.disabled = false;
   }
