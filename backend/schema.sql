@@ -216,6 +216,41 @@ alter table public.payments enable row level security;
 create index if not exists sales_sale_date_idx on public.sales(sale_date desc);
 create index if not exists cash_bank_transaction_date_idx on public.cash_bank_transactions(transaction_date desc);
 
+create or replace function public.reset_accounting_records(p_actor text, p_reason text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  delete from public.cash_bank_transactions;
+  delete from public.sales;
+  delete from public.orders;
+  delete from public.debts;
+  delete from public.bank_reconciliations;
+  delete from public.cash_closings;
+  delete from public.budgets;
+
+  insert into public.app_settings (key, value, updated_at)
+  values ('accounting_reset_at', clock_timestamp()::text, clock_timestamp())
+  on conflict (key) do update
+  set value = excluded.value, updated_at = excluded.updated_at;
+
+  insert into public.audit_logs (action, entity_type, entity_id, reason, actor, details)
+  values (
+    'RESET_RECORDS',
+    'accounting_data',
+    'all',
+    p_reason,
+    p_actor,
+    '{"tables":["cash_bank_transactions","sales","orders","debts","bank_reconciliations","cash_closings","budgets"]}'::jsonb
+  );
+end;
+$$;
+
+revoke all on function public.reset_accounting_records(text, text) from public, anon, authenticated;
+grant execute on function public.reset_accounting_records(text, text) to service_role;
+
 alter table public.menu_items enable row level security;
 alter table public.sales enable row level security;
 alter table public.cash_bank_transactions enable row level security;

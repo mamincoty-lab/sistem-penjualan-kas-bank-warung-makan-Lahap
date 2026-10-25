@@ -327,6 +327,13 @@ async function voidSale(id, body) {
   return { message: 'Penjualan dibalik dan dicatat dalam audit log.' };
 }
 
+async function resetAccountingRecords(body) {
+  requireOwnerPin(body);
+  const { actor, reason } = validateAuditActor(body);
+  await supabaseRequest('rpc/reset_accounting_records', { method: 'POST', body: { p_actor: actor, p_reason: reason } });
+  return { message: 'Pencatatan berhasil direset.' };
+}
+
 function validateCombo(body) {
   const name = String(body.name || '').trim();
   const price = Number(body.price);
@@ -387,10 +394,17 @@ async function replayOfflineOperations(operations) {
   if (!Array.isArray(operations) || operations.length > 100) throw new Error('Batch sinkronisasi tidak valid.');
   const results = [];
   const idMap = new Map();
+  const resetSetting = await supabaseRequest('app_settings', { query: { select: 'value', key: 'eq.accounting_reset_at', limit: '1' } });
+  const resetAt = resetSetting[0]?.value ? new Date(resetSetting[0].value).getTime() : null;
   for (const operation of operations) {
     const opId = String(operation.op_id || '').trim();
     if (!opId || !operation.endpoint) { results.push({ op_id: opId, ok: false, error: 'ID operasi atau endpoint kosong.' }); continue; }
     try {
+      const queuedAt = Date.parse(operation.queued_at || '');
+      if (resetAt && (!Number.isFinite(queuedAt) || queuedAt <= resetAt)) {
+        results.push({ op_id: opId, ok: true, discarded: true, message: 'Operasi offline dibuat sebelum reset.' });
+        continue;
+      }
       const previous = await supabaseRequest('sync_operations', { query: { select: 'op_id,result', op_id: `eq.${opId}`, limit: '1' } });
       if (previous.length) {
         const priorResult = previous[0].result;
@@ -536,6 +550,9 @@ const server = http.createServer(async (request, response) => {
     }
     if (url.pathname === '/api/orders' && request.method === 'POST') {
       return sendJson(response, 201, await createOrder(await readBody(request)));
+    }
+    if (url.pathname === '/api/reset-records' && request.method === 'POST') {
+      return sendJson(response, 200, await resetAccountingRecords(await readBody(request)));
     }
     if (url.pathname === '/api/cash-bank' && request.method === 'POST') {
       const body = await readBody(request);

@@ -50,3 +50,5 @@ Gunakan `service_role` key hanya di `.env` backend. Jangan pernah memasukkannya 
 
 `OWNER_APPROVAL_PIN` diperlukan untuk menghapus/void transaksi atau menu. PIN diverifikasi di backend, bukan di browser.
 
+Untuk memasang fitur **Reset pencatatan**, jalankan ulang seluruh `backend/schema.sql` di Supabase SQL Editor setelah memperbarui aplikasi. Tombol Reset pencatatan menghapus transaksi, penjualan, pesanan, hutang/piutang, anggaran, rekonsiliasi, dan penutupan kas; menu, pengaturan, serta audit log tetap tersimpan. Tindakan ini memerlukan PIN owner dan tidak dapat dibatalkan.
+

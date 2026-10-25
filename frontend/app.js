@@ -82,6 +82,17 @@ async function loadLatestAutomaticSnapshot() {
     request.onerror = () => resolve(null);
   });
 }
+async function clearAutomaticSnapshots() {
+  const database = await openBackupDatabase();
+  if (!database) return;
+  await new Promise(resolve => {
+    const transaction = database.transaction('snapshots', 'readwrite');
+    transaction.objectStore('snapshots').clear();
+    transaction.oncomplete = resolve;
+    transaction.onerror = resolve;
+  });
+  updateBackupStatus();
+}
 async function hydrateLocalState(localData = loadLocalData()) {
   if (!localData.menu.length && !localData.cashBank.length && !localData.orders.length) {
     const snapshot = await loadLatestAutomaticSnapshot();
@@ -822,6 +833,29 @@ function closeApproval(result) {
 }
 
 $('#menu-image-file').addEventListener('change', async (event) => { const file = event.target.files[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { event.target.value = ''; return showToast('Ukuran foto maksimal 2 MB.', true); } try { selectedMenuImage = await compressImage(file); showMenuImagePreview(selectedMenuImage); } catch { showToast('Foto tidak dapat dibaca.', true); } });
+$('#reset-records-button').addEventListener('click', async event => {
+  const button = event.currentTarget;
+  if (window.location.protocol === 'file:' || !navigator.onLine || state.pendingSync.length || loadLocalData().pendingSync.length) return showToast('Reset harus dilakukan saat online setelah semua perubahan tersinkron.', true);
+  const confirmed = window.confirm('Semua transaksi, penjualan, pesanan, hutang/piutang, anggaran, rekonsiliasi, dan penutupan kas akan dihapus. Menu dan pengaturan tetap. Lanjutkan?');
+  if (!confirmed) return;
+  const approval = await requestOwnerApproval('Reset pencatatan', 'Masukkan PIN owner, nama pelaku, dan alasan. Tindakan ini menghapus seluruh pencatatan keuangan.');
+  if (!approval) return;
+  button.disabled = true;
+  try {
+    await api('/api/reset-records', { method: 'POST', body: approval });
+    for (const key of ['sales', 'cashBank', 'orders', 'auditLogs', 'reconciliations', 'closings', 'debts', 'budgets', 'pendingSync']) state[key] = [];
+    localStorage.removeItem('lahap-offline-mode');
+    saveLocalData();
+    await clearAutomaticSnapshots();
+    const loaded = await loadData();
+    if (loaded === false) showToast('Pencatatan di server sudah direset, tetapi data terbaru belum bisa dimuat.', true);
+    else showToast('Pencatatan direset. Saldo sekarang mulai dari Rp 0.');
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
 $('#menu-form').addEventListener('submit', async (event) => { event.preventDefault(); const button = event.submitter; button.disabled = true; try { const menu = { name: $('#menu-name').value.trim(), category: $('#menu-category').value, price: Number($('#menu-price').value), image_url: selectedMenuImage || null }; if (!menu.name || !menu.price || menu.price <= 0) throw new Error('Isi nama dan harga menu dengan benar.'); if (isLocalMode()) { menu.id = Date.now(); state.menu.push(menu); saveLocalData(); renderMenu(); renderQuickMenu(); } else { await api('/api/menu', { method: 'POST', body: menu }); await loadData(); renderQuickMenu(); } event.target.reset(); selectedMenuImage = null; showMenuImagePreview(null); $('#menu-category').value = 'Makanan'; showToast('Menu baru berhasil ditambahkan.'); } catch (error) { showToast(error.message, true); } finally { button.disabled = false; } });
 $('#activity-body').addEventListener('click', (event) => { const button = event.target.closest('.delete-button'); const printButton = event.target.closest('.print-button'); const receiptButton = event.target.closest('.receipt-button'); if (button) deleteActivity(button.dataset.id, button.dataset.source); if (printButton) printReceipt(JSON.parse(printButton.dataset.item)); if (receiptButton) { const item = state.cashBank.find(row => String(row.id) === receiptButton.dataset.id); openReceipt(receiptButton.dataset.id, item?.receipt_path); } });
 $('#activity-body').addEventListener('click', event => { const button = event.target.closest('.edit-transaction-button'); if (button) openEditTransaction(button.dataset.id); });
